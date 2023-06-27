@@ -23,7 +23,7 @@ void RYLR890_WriteString(const char* strBuffer);
 void RYLR890_Sync();
 void RYLR890_Reset();
 const char* RYLR890_Stat(unsigned char);
-void RYLR890_Configure_L1(unsigned char ucSF = 7, unsigned char ucBW = 7, unsigned char ucCR = 1, unsigned char ucPR = 4);
+void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR);
 
 unsigned int quantite_recue = 0;
 
@@ -52,7 +52,7 @@ void setup() {
   lcd.setCursor(0, 1);
   //- Écrire la chaîne « cours 243-Y55 » sur la seconde ligne.}
   lcd.print("le cours 243-Y55");
-  delay(5000);
+  delay(1000);
   // - Effacer l'afficheur
   lcd_Effacer();
 
@@ -67,7 +67,7 @@ void setup() {
 
   delay(2000);
 
-  RYLR890_Configure_L1();
+  RYLR890_Configure_L1(7, 7, 1, 4);
   lcd_EcrireChaine(0, RYLR890_Stat(0));
   lcd_EcrireChaine(1, RYLR890_Stat(1));
 
@@ -100,8 +100,6 @@ void loop() {
       lcd.print(strBuffer);
     }
   }
-
-
 }
 
 void lcd_Effacer() {
@@ -152,7 +150,9 @@ char* RYLR890_ReadString(char* strBuffer) {
   String str = String(strBuffer);
   str.trim();
   
-  return str.c_str();
+  strcpy(strBuffer, str.c_str());
+  return strBuffer;
+  
 }
 
 void RYLR890_Sync() {
@@ -167,12 +167,13 @@ void RYLR890_Sync() {
 
   while (lora.available() == 0) {
     lcd_EcrireChaine(1, String(i++).c_str());
-    delay(1000);
+    delay(10);
   }
 
   if (lora.available() > 0) {
     reponse = RYLR890_ReadString(tampon);
-    lcd_EcrireChaine(1, (const char *)reponse);
+    // lcd_EcrireChaine(1, (const char *)reponse);
+    lcd_EcrireChaine(1, (const char *)tampon);
   } else {
     //
     lcd_EcrireChaine(1, "No Sync");
@@ -241,7 +242,7 @@ const char*  RYLR890_Stat(unsigned char index) {
   }
 }
 
-void RYLR890_Configure_L1(unsigned char ucSF = 7, unsigned char ucBW = 7, unsigned char ucCR = 1, unsigned char ucPR = 4) {
+void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR) {
 
   String str = String("AT+PARAMETER=") + String(ucSF) + String(",") + String(ucBW) + String(",") + String(ucCR) + String(",") + String(ucPR); 
   RYLR890_WriteString(str.c_str());
