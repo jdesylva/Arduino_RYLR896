@@ -7,6 +7,18 @@
 // Initialiser la constante identifiant le port utilisé pour la remise à zéro du module LoRa RLYR896
 #define RESET 4
 
+// Paramètres de couche physique (L1) du module LoRa
+#define SF  7    // Facteur d'étalement
+#define BW  7    // Largeur de bande (125kHz)
+#define CR  1    // Ratio d'encodage
+#define PR  4    // Préambule
+#define PWR 15   // Puissance d'émission en dBm (0-15)
+
+// Paramètres de couche réseau (L3) du module LoRa
+#define ADRESSE    10    // Adresse (0-16)
+#define NETWORKID  0    // Identificateur réseau (0-65535)
+
+
 // Initialiser le lien série de LoRa sur les ports 2 & 3
 SoftwareSerial lora(2, 3);
 
@@ -24,8 +36,13 @@ void RYLR890_Sync();
 void RYLR890_Reset();
 const char* RYLR890_Stat(unsigned char);
 void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR);
+void RYLR890_Configure_L3(unsigned char adresse, unsigned int id);
 
 unsigned int quantite_recue = 0;
+char gc_tampon[100];
+char reseau[100];
+char reponse[100];
+
 
 void setup() {
 
@@ -67,7 +84,8 @@ void setup() {
 
   delay(2000);
 
-  RYLR890_Configure_L1(7, 7, 1, 4);
+  RYLR890_Configure_L1(SF, BW, CR, PR);
+  RYLR890_Configure_L3(ADRESSE, NETWORKID);
   lcd_EcrireChaine(0, RYLR890_Stat(0));
   lcd_EcrireChaine(1, RYLR890_Stat(1));
 
@@ -81,13 +99,18 @@ void loop() {
   //
   char strBuffer[100];
 
-  while (0) {
+  while (1) {
+    delay(100);
     strBuffer[0] = 0;
     RYLR890_ReadString(strBuffer);
     // Si on a reçu des données...
     if (0 != strBuffer[0]) {
       // Incrémenter le nombre de chaines recues
       quantite_recue++;
+      Serial.print("Longueur => ");
+      Serial.print(strlen(strBuffer));
+      Serial.print("; Msg => ");
+      Serial.println(strBuffer);
       //- Effacer l'afficheur
       lcd.clear();
       //- Positionner le curseur de l’afficheur sur la ligne 1, colonne 1.
@@ -124,6 +147,7 @@ void RYLR890_WriteString(const char* strBuffer) {
   lora.println(strBuffer);
   //lora.println('\r');
   Serial.println(strBuffer);
+  delay(500);
 
 }
 
@@ -149,10 +173,10 @@ char* RYLR890_ReadString(char* strBuffer) {
   }
   String str = String(strBuffer);
   str.trim();
-  
+
   strcpy(strBuffer, str.c_str());
   return strBuffer;
-  
+
 }
 
 void RYLR890_Sync() {
@@ -188,10 +212,7 @@ void RYLR890_Reset() {
 
 }
 
-const char*  RYLR890_Stat(unsigned char index) {
-
-  char tampon[100];
-  char* reponse = 0;
+const char* RYLR890_Stat(unsigned char index) {
 
   if (index == 0) {
 
@@ -203,49 +224,93 @@ const char*  RYLR890_Stat(unsigned char index) {
     }
 
     if (lora.available() > 0) {
-      //      return RYLR890_ReadString(tampon);
-      RYLR890_ReadString(tampon);
-      Serial.println(tampon);
-      tampon[12] = 'P';
-      tampon[13] = 'a';
-      tampon[14] = 'r';
-      reponse = &tampon[12];
-      Serial.println("Tampon[0] == " + String(tampon[0]));
+      //      return RYLR890_ReadString(gc_tampon);
+      RYLR890_ReadString(gc_tampon);
+      Serial.println(gc_tampon);
+      gc_tampon[22] = 'P';
+      gc_tampon[23] = 'a';
+      gc_tampon[24] = 'r';
+      strcpy(reponse, &gc_tampon[22]);
+      Serial.println("Tampon[0] == " + String(gc_tampon[0]));
       Serial.flush();
       delay(100);
-      Serial.println("Tampon[1] == " + String(tampon[1]));
+      Serial.println("Tampon[1] == " + String(gc_tampon[1]));
       Serial.flush();
       delay(100);
-      Serial.println("Tampon[2] == " + String(tampon[2]));
+      Serial.println("Tampon[2] == " + String(gc_tampon[2]));
       Serial.flush();
       delay(100);
-      Serial.println("Tampon[3] == " + String(tampon[3]));
+      Serial.println("Tampon[3] == " + String(gc_tampon[3]));
       Serial.flush();
       delay(100);
-      Serial.println("Tampon[4] == " + String(tampon[4]));
+      Serial.println("Tampon[4] == " + String(gc_tampon[4]));
       Serial.flush();
       delay(100);
-      Serial.println("Tampon[5] == " + String(tampon[5]));
-      Serial.println("Tampon[6] == " + String(tampon[6]));
-      Serial.println("Tampon[7] == " + String(tampon[7]));
+      Serial.println("Tampon[5] == " + String(gc_tampon[5]));
+      Serial.println("Tampon[6] == " + String(gc_tampon[6]));
+      Serial.println("Tampon[7] == " + String(gc_tampon[7]));
       Serial.flush();
       delay(100);
       Serial.println(reponse);
       Serial.flush();
       return reponse;
-    } else {
-      //
-      return "Erreur";
+    } else {  // Pas de données
+      return "";
     }
-  } else {
-    return "";
+  } else {  // index != 0
+
+    RYLR890_WriteString("AT+ADDRESS?");
+    delay(100);
+    while (lora.available() == 0) {      strcpy(reponse, &gc_tampon[5]);
+
+      delay(10);
+      Serial.print(".");
+    }
+
+    if (lora.available() > 0) {
+      RYLR890_ReadString(gc_tampon);
+      gc_tampon[5] = 'A';
+      gc_tampon[6] = 'd';
+      gc_tampon[7] = 'd';
+      strcpy(reponse, &(gc_tampon[5]));
+      strcat(reponse, "; ");
+
+      RYLR890_WriteString("AT+NETWORKID?");
+      delay(100);
+      while (lora.available() == 0) {
+        delay(10);
+        Serial.print(".");
+      }
+
+      if (lora.available() > 0) {
+        RYLR890_ReadString(gc_tampon);
+        gc_tampon[5] = 'N';
+        gc_tampon[6] = 'e';
+        gc_tampon[7] = 't';
+
+        strcat(reponse, &(gc_tampon[5]));
+        Serial.print(reponse);
+        return reponse;
+      }
+    }
   }
 }
 
 void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR) {
 
-  String str = String("AT+PARAMETER=") + String(ucSF) + String(",") + String(ucBW) + String(",") + String(ucCR) + String(",") + String(ucPR); 
+  String str = String("AT+PARAMETER=") + String(ucSF) + String(",") + String(ucBW) + String(",") + String(ucCR) + String(",") + String(ucPR);
   RYLR890_WriteString(str.c_str());
   delay(10);
 
+}
+
+void RYLR890_Configure_L3(unsigned char adresse, unsigned int id) {
+
+  String str = String("AT+ADDRESS=") + String(adresse);
+  RYLR890_WriteString(str.c_str());
+  delay(10);
+
+  str = String("AT+NETWORKID=") + String(id);
+  RYLR890_WriteString(str.c_str());
+  delay(10);
 }
