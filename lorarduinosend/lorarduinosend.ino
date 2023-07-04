@@ -8,11 +8,11 @@
 #define RESET 4
 
 // Paramètres de couche physique (L1) du module LoRa
-#define SF  12   // Facteur d'étalement
-#define BW  7    // Largeur de bande (125kHz)
+#define SF  7    // Facteur d'étalement
+#define BW  7    // Largeur de bande (7 == 125kHz; 8 == 250 kHz; 9 == 500 kHz)
 #define CR  1    // Ratio d'encodage
 #define PR  4    // Préambule
-#define PWR 15   // Puissance d'émission en dBm (0-15)
+#define PE  5    // Puissance d'émission en dBm (0-15)
 
 // Paramètres de couche réseau (L3) du module LoRa
 #define ADRESSE    20    // Adresse (0-16)
@@ -35,7 +35,7 @@ void RYLR890_WriteString(const char* strBuffer);
 void RYLR890_Sync();
 void RYLR890_Reset();
 const char* RYLR890_Stat(unsigned char);
-void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR);
+void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR, unsigned char ucPWR);
 void RYLR890_Configure_L3(unsigned char adresse, unsigned int id);
 
 char gc_tampon[100];
@@ -70,11 +70,11 @@ void setup() {
   RYLR890_Reset();
   RYLR890_Sync();
 
-  lcd_EcrireChaine(1, "20230701");
+  lcd_EcrireChaine(1, "20230704");
 
-  delay(4000);
+  delay(1000);
 
-  RYLR890_Configure_L1(SF, BW, CR, PR);
+  RYLR890_Configure_L1(SF, BW, CR, PR, PE);
   RYLR890_Configure_L3(ADRESSE, NETWORKID);
   lcd_EcrireChaine(0, RYLR890_Stat(0));
   lcd_EcrireChaine(1, RYLR890_Stat(1));
@@ -89,7 +89,7 @@ void loop() {
   while (1) {
     //
     aString = String("Chaine no : ") + String(index++);
-    aString = String("AT+SEND=0,") + String(aString.length()+2) + String(",") + aString + String("\r\n"); 
+    aString = String("AT+SEND=0,") + String(aString.length() + 2) + String(",") + aString + String("\r\n");
     RYLR890_WriteString(aString.c_str());
     delay(5000);
   }
@@ -146,7 +146,7 @@ unsigned char RYLR890_ReadString(char* strBuffer) {
 
   *(ptrStr++) = 0;
 
-  Serial.println(strBuffer);
+  Serial.print("RYLR890_ReadString == "); Serial.println(strBuffer);
 
   return nChar;
 
@@ -188,30 +188,47 @@ const char* RYLR890_Stat(unsigned char index) {
   if (index == 0) {
 
     RYLR890_WriteString("AT+PARAMETER?");
-    delay(200);
+    delay(1000);
     while (lora.available() == 0) {
       delay(10);
       Serial.print(".");
     }
 
-    //    if (! Verifier_OK()) {
-    //      return "Erreur 1";
-    //    }
 
     if (lora.available() > 0) {
       RYLR890_ReadString(gc_tampon);
-      Serial.print("RYLR890_ReadString(gc_tampon); == ");
+      Serial.print("AT+PARAMETER? == ");
       Serial.println(gc_tampon);
       gc_tampon[7] = 'P';
       gc_tampon[8] = 'a';
       gc_tampon[9] = 'r';
       strcpy(reponse, &gc_tampon[7]);
-      return reponse;
-    } else {  // Pas de données
-      Serial.println("Pas de donnees");
-      return "Pas de donnees";
+      strcat(reponse, ";P=");
     }
-  } else {  // index != 0
+
+    RYLR890_WriteString("AT+CRFOP?");
+    delay(100);
+    while (lora.available() == 0) {
+      delay(10);
+      Serial.print(".");
+    }
+
+    if (lora.available() > 0) {
+      RYLR890_ReadString(gc_tampon);
+      Serial.print("AT+CRFOP == ");
+      Serial.println(gc_tampon);
+      strcat(reponse, &gc_tampon[7]);
+    } else {  // Pas de données
+      Serial.println("Pas de donnees de puissance.");
+      strcat(reponse, "0 PWR");
+    }
+
+    return reponse;
+    //  } else {  // Pas de données
+    //    Serial.println("Pas de donnees");
+    //    return "Pas de donnees";
+  }
+  else {  // index != 0
 
     RYLR890_WriteString("AT+ADDRESS?");
     delay(100);
@@ -255,6 +272,7 @@ bool Verifier_OK(void) {
   if (lora.available() > 0) {
     gc_tampon[0] = 0;
     RYLR890_ReadString(gc_tampon);
+    Serial.print("Verifier_OK == "); Serial.println(gc_tampon);
     if (gc_tampon[3] == 13) {
       gc_tampon[3] = 0;
     }
@@ -272,22 +290,32 @@ bool Verifier_OK(void) {
   }
 }
 
-void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR) {
+void RYLR890_Configure_L1(unsigned char ucSF, unsigned char ucBW, unsigned char ucCR, unsigned char ucPR, unsigned char ucPWR) {
 
   String str = String("AT+PARAMETER=") + String(ucSF) + String(",") + String(ucBW) + String(",") + String(ucCR) + String(",") + String(ucPR) + String("\r\n");
   RYLR890_WriteString(str.c_str());
+  delay(1000);
   if (! Verifier_OK()) {
     return;
   }
 
   delay(10);
 
+  str = String("AT+CRFOP=") + String(ucPWR) + String("\r\n");
+  RYLR890_WriteString(str.c_str());
+  delay(1000);
+  if (! Verifier_OK()) {
+    return;
+  }
+
+  delay(10);
 }
 
 void RYLR890_Configure_L3(unsigned char adresse, unsigned int id) {
 
   String str = String("AT+ADDRESS=") + String(adresse) + String("\r\n");
   RYLR890_WriteString(str.c_str());
+  delay(1000);
   if (! Verifier_OK()) {
     return;
   }
@@ -296,6 +324,7 @@ void RYLR890_Configure_L3(unsigned char adresse, unsigned int id) {
 
   str = String("AT+NETWORKID=") + String(id);
   RYLR890_WriteString(str.c_str());
+  delay(1000);
   if (! Verifier_OK()) {
     return;
   }
